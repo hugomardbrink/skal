@@ -1,7 +1,6 @@
 #include <sstream>
 #include <unordered_map>
 #include <functional>
-#include <variant>
 
 #include "parser.hxx"
 
@@ -74,13 +73,13 @@ Result<CommandGroup> Parser::parse(string input) {
     while (ss >> token) {
         if (tokenActions.find(token) != tokenActions.end()) {
             Result<Command> result = tokenActions[token](cmdGroup, cmd, ss);
-            if (std::holds_alternative<Error>(result)) {
-                return std::get<Error>(result);
+            if (result.is_error()) {
+                return result.unwrap_error();
             } else {
-                cmd = std::get<Command>(result);
+                cmd = result.unwrap();
             }
         } else {
-            if(cmd.cmd == "") {
+            if(cmd.cmd.empty()) {
                 cmd.cmd = token;
             } else {
                 cmd.args.emplace_back(token);

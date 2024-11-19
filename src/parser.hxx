@@ -28,7 +28,6 @@ namespace parser {
 
     struct Parser {
         public:
-
         Result<parser::CommandGroup> parse(string input);
     };
 };
