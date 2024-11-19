@@ -18,16 +18,27 @@ namespace {
     constexpr int FD_WRITE = 1;
 }
 
+char **GetExecArgs(const Command& cmd){
+    char **exec_args = new char*[cmd.args.size() + 2];
+    exec_args[0] = const_cast<char*>(cmd.cmd.c_str());
+    for (int i{1}; i < cmd.args.size() + 1; i++) {
+        exec_args[i] = const_cast<char*>(cmd.args[i-1].c_str());
+    }
+    // Never freed but process will exit after execvp, thus freeing memory
+    return exec_args;
+} 
+
 // Void since only successes will return
-void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd, const CommandGroup& cmd_group, std::optional<int> fd) {    
+void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd_it, const CommandGroup& cmd_group, std::optional<int> fd) {    
     if(fd.has_value()) { 
         dup2(fd.value(), STDOUT_FILENO);
         close(fd.value());
     }
     
-    auto next_cmd = cmd+1;
+    auto cmd = *cmd_it;
+    auto next_cmd_it = cmd_it+1;
     
-    if(next_cmd == cmd_group.commands.rend()) { // last command
+    if(next_cmd_it == cmd_group.commands.rend()) { // last command
         if(cmd_group.rstdout.has_value()) {
             int stdout_fd{open(cmd_group.rstdout.value().c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644)};
             if (dup2(stdout_fd, STDOUT_FILENO) == -1) {
@@ -58,12 +69,7 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd, const Comm
             close(stdin_fd);
         }
  
-        char **exec_args = new char*[cmd->args.size() + 2];
-        exec_args[0] = const_cast<char*>(cmd->cmd.c_str());
-        for (int i{1}; i < cmd->args.size() + 1; i++) {
-            exec_args[i] = const_cast<char*>(cmd->args[i-1].c_str());
-        }
-
+        char **exec_args = GetExecArgs(cmd);
         execvp(exec_args[0], exec_args);
  
         // If code reaches here, execvp failed
@@ -78,7 +84,7 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd, const Comm
         auto pid = fork();
 
         if(pid == 0) {
-            ExecuteCommand(next_cmd, cmd_group, std::optional<int>{new_fd[FD_WRITE]});
+            ExecuteCommand(next_cmd_it, cmd_group, std::optional<int>{new_fd[FD_WRITE]});
         }
         else if(pid > 0) {
             close(new_fd[FD_WRITE]); 
@@ -87,14 +93,10 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd, const Comm
             
             waitpid(pid, NULL, 0);
             
-            char **exec_args = new char*[cmd->args.size() + 2];
-            exec_args[0] = const_cast<char*>(cmd->cmd.c_str());
-            for (int i{1}; i < cmd->args.size() + 1; i++) {
-                exec_args[i] = const_cast<char*>(cmd->args[i-1].c_str());
-            }
-
+            char **exec_args = GetExecArgs(cmd);
             execvp(exec_args[0], exec_args);
 
+            // If code reaches here, execvp failed
             std::cerr << "execvp failed" << std::endl;
             _exit(1);
         }
@@ -106,30 +108,29 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd, const Comm
 }
 
 Result<void> shell::ExecuteCommandGroup(const CommandGroup& cmdGroup) {
-   
-    int inFd{STDIN_FILENO};
-    auto cmd = cmdGroup.commands.rbegin();
+    auto cmd_it = cmdGroup.commands.rbegin();
+    auto cmd = *cmd_it;
 
-    if(cmd->cmd == "cd") {
-        if(cmd->args.size() == 0) {
+    if(cmd.cmd == "cd") {
+        if(cmd.args.size() == 0) {
             chdir(getenv("HOME"));
         }
-        else if(cmd->args.size() > 1) {
+        else if(cmd.args.size() > 1) {
             return Error{"cd: too many arguments"};
         }
         else {
-            int status = chdir(cmd->args[0].c_str());
+            int status = chdir(cmd.args[0].c_str());
             if (status != 0) {
                return Error{"cd failed"}; 
             }
         }
-    } else if(cmd->cmd == "exit") {
+    } else if(cmd.cmd == "exit") {
         exit(0);
     } else {
         auto pid = fork();
         
         if(pid == 0) {
-            ExecuteCommand(cmd, cmdGroup, std::nullopt);
+            ExecuteCommand(cmd_it, cmdGroup, std::nullopt);
         } else if(pid > 0) {
             waitpid(pid, NULL, 0);
         } else {
@@ -139,12 +140,12 @@ Result<void> shell::ExecuteCommandGroup(const CommandGroup& cmdGroup) {
     return {};
 }
 
-std::string shell::GetCurrentDir() {
+Result<std::string> shell::GetCurrentDir() {
     constexpr auto MAX_UNIX_PATH{1024};
     char cwd[MAX_UNIX_PATH];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         return std::string(cwd);
     } else {
-        return "";
+        return Error{"getcwd failed"};
     }
 }
