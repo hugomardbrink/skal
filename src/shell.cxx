@@ -19,7 +19,7 @@ namespace {
 }
 
 // Void since only successes will return
-void shell::executeCommand(std::vector<Command>::const_reverse_iterator cmd, const CommandGroup& cmd_group, std::optional<int> fd) {    
+void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd, const CommandGroup& cmd_group, std::optional<int> fd) {    
     if(fd.has_value()) { 
         dup2(fd.value(), STDOUT_FILENO);
         close(fd.value());
@@ -78,7 +78,7 @@ void shell::executeCommand(std::vector<Command>::const_reverse_iterator cmd, con
         auto pid = fork();
 
         if(pid == 0) {
-            executeCommand(next_cmd, cmd_group, std::optional<int>{new_fd[FD_WRITE]});
+            ExecuteCommand(next_cmd, cmd_group, std::optional<int>{new_fd[FD_WRITE]});
         }
         else if(pid > 0) {
             close(new_fd[FD_WRITE]); 
@@ -105,7 +105,7 @@ void shell::executeCommand(std::vector<Command>::const_reverse_iterator cmd, con
     }
 }
 
-Result<void> shell::executeCommandGroup(const CommandGroup& cmdGroup) {
+Result<void> shell::ExecuteCommandGroup(const CommandGroup& cmdGroup) {
    
     int inFd{STDIN_FILENO};
     auto cmd = cmdGroup.commands.rbegin();
@@ -129,7 +129,7 @@ Result<void> shell::executeCommandGroup(const CommandGroup& cmdGroup) {
         auto pid = fork();
         
         if(pid == 0) {
-            executeCommand(cmd, cmdGroup, std::nullopt);
+            ExecuteCommand(cmd, cmdGroup, std::nullopt);
         } else if(pid > 0) {
             waitpid(pid, NULL, 0);
         } else {
@@ -139,8 +139,9 @@ Result<void> shell::executeCommandGroup(const CommandGroup& cmdGroup) {
     return {};
 }
 
-std::string shell::get_current_dir() {
-    char cwd[1024];
+std::string shell::GetCurrentDir() {
+    constexpr auto MAX_UNIX_PATH{1024};
+    char cwd[MAX_UNIX_PATH];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         return std::string(cwd);
     } else {

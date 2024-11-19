@@ -15,15 +15,15 @@ int main() {
 
     while(true) {
         string input;
-        cout << std::endl << shell::get_current_dir() << " > ";
+        cout << std::endl << shell::GetCurrentDir() << " > ";
         std::getline(std::cin, input);
-        result::Result<parser::CommandGroup> cmdGroupResult = p.parse(input);
+        result::Result<parser::CommandGroup> cmd_group_result = p.parse(input);
         
-        if (cmdGroupResult.is_error()) {
-            cout << cmdGroupResult.unwrap_error().message << endl;
+        if (cmd_group_result.is_error()) {
+            cout << cmd_group_result.unwrap_error().message << endl;
         } else {
-            auto cmdGroup = cmdGroupResult.unwrap();
-            shell::executeCommandGroup(cmdGroup);
+            auto cmd_group = cmd_group_result.unwrap();
+            shell::ExecuteCommandGroup(cmd_group);
         }        
     }
 

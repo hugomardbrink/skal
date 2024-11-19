@@ -6,73 +6,72 @@
 
 using namespace parser;
 
-namespace {
-    std::unordered_map<string, std::function<Result<Command>(CommandGroup&, Command, std::stringstream&)>> tokenActions = {
-        {"|", [](CommandGroup& cmdGroup, Command cmd, std::stringstream& _) -> Result<Command> {                     
-            if(cmd.cmd == "") {
-                return Error{"Parse error at '|'"};
-            }
-            cmdGroup.commands.emplace_back(cmd);
-            return Result<Command>(Command{});
-        }},
-        {"<", [](CommandGroup& cmdGroup, Command cmd, std::stringstream& ss) -> Result<Command> {
-            if(cmd.cmd == "") {
-                return Error{"Parse error at '<'"};
-            }
+std::unordered_map<string, std::function<Result<Command>(CommandGroup&, Command, std::stringstream&)>> token_actions = {
+    {"|", [](CommandGroup& cmd_group, Command cmd, std::stringstream& _) -> Result<Command> {                     
+        if(cmd.cmd.empty()) {
+            return Error{"Parse error at '|'"};
+        }
+        cmd_group.commands.emplace_back(cmd);
+        return Result<Command>(Command{});
+    }},
+    {"<", [](CommandGroup& cmd_group, Command cmd, std::stringstream& ss) -> Result<Command> {
+        if(cmd.cmd.empty()) {
+            return Error{"Parse error at '<'"};
+        }
 
-            std::string fileName;
-            ss >> fileName;
-            if (fileName == ""){
-                return Error{"Parse error at '<'"};
-            }
+        std::string file_name;
+        ss >> file_name;
+        if (file_name.empty()) {
+            return Error{"Parse error at '<'"};
+        }
 
-            cmdGroup.rstdin = std::make_optional(fileName);
-            return Result<Command>(cmd);
-        }},
-        {">", [](CommandGroup& cmdGroup, Command cmd, std::stringstream& ss) -> Result<Command> {
-            if(cmd.cmd == "") {
-                return Error{"Parse error at '>'"};
-            }
+        cmd_group.rstdin = std::optional<string>(file_name);
+        return Result<Command>(cmd);
+    }},
+    {">", [](CommandGroup& cmd_group, Command cmd, std::stringstream& ss) -> Result<Command> {
+        if(cmd.cmd.empty()) {
+            return Error{"Parse error at '>'"};
+        }
 
-            std::string fileName;
-            ss >> fileName;
-            if (fileName == ""){
-                return Error{"Parse error at '>'"};
-            }
+        std::string file_name;
+        ss >> file_name;
+        if (file_name.empty()){
+            return Error{"Parse error at '>'"};
+        }
 
-            cmdGroup.rstdout = std::make_optional(fileName);
-            return Result<Command>(cmd);
-        }},
-        {"2>", [](CommandGroup& cmdGroup, Command cmd, std::stringstream& ss) -> Result<Command> {
-            if(cmd.cmd == "") {
-                return Error{"Parse error at '2>'"};
-            }
+        cmd_group.rstdout = std::optional<string>(file_name); 
+        return Result<Command>(cmd);
+    }},
+    {"2>", [](CommandGroup& cmd_group, Command cmd, std::stringstream& ss) -> Result<Command> {
+        if(cmd.cmd.empty()) {
+            return Error{"Parse error at '2>'"};
+        }
 
-            std::string fileName;
-            ss >> fileName;
-            if (fileName == ""){
-                return Error{"Parse error at '2>'"};
-            }
+        std::string file_name;
+        ss >> file_name;
+        if (file_name.empty()){
+            return Error{"Parse error at '2>'"};
+        }
 
-            cmdGroup.rstderr = std::make_optional(fileName);
-            return Result<Command>(cmd);
-        }},
-        {"&", [](CommandGroup& cmdGroup, Command cmd, std::stringstream& _) -> Result<Command> {
-            cmdGroup.isBackground = true;
-            return Result<Command>(cmd);
-        }}
-    };
-} // namespace
+        cmd_group.rstderr = std::make_optional(file_name);
+        return Result<Command>(cmd);
+    }},
+    {"&", [](CommandGroup& cmd_group, Command cmd, std::stringstream& _) -> Result<Command> {
+        cmd_group.is_background = true;
+        return Result<Command>(cmd);
+    }}
+};
+
 
 Result<CommandGroup> Parser::parse(string input) {
-    CommandGroup cmdGroup;
+    CommandGroup cmd_group;
     std::stringstream ss(input);
     string token;
 
     Command cmd;
     while (ss >> token) {
-        if (tokenActions.find(token) != tokenActions.end()) {
-            Result<Command> result = tokenActions[token](cmdGroup, cmd, ss);
+        if (token_actions.find(token) != token_actions.end()) {
+            Result<Command> result = token_actions[token](cmd_group, cmd, ss);
             if (result.is_error()) {
                 return result.unwrap_error();
             } else {
@@ -86,9 +85,10 @@ Result<CommandGroup> Parser::parse(string input) {
             }
         } 
     }
-    if (cmd.cmd != "") {
-        cmdGroup.commands.emplace_back(cmd);
+
+    if (!cmd.cmd.empty()) { 
+        cmd_group.commands.emplace_back(cmd);
     }
 
-    return Result<CommandGroup>(cmdGroup);
+    return Result<CommandGroup>(cmd_group);
 }

@@ -12,7 +12,7 @@ using std::string, std::vector, std::optional, std::nullopt;
 
 namespace parser {
     struct Command {
-        string cmd;
+        string cmd = "";
         vector<string> args = {};
     };
 
@@ -23,12 +23,12 @@ namespace parser {
         optional<string> rstdout = nullopt;
         optional<string> rstderr = nullopt;
 
-        bool isBackground = false;
+        bool is_background = false;
     };
 
     struct Parser {
         public:
-        Result<parser::CommandGroup> parse(string input);
+            Result<parser::CommandGroup> parse(string input);
     };
 };
 
