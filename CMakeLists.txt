@@ -9,3 +9,5 @@ file(GLOB_RECURSE SOURCES src/*.cxx src/*.hxx)
 
 add_executable(skal ${SOURCES})
 
+target_link_libraries(skal PRIVATE readline)
+

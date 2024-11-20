@@ -1,11 +1,11 @@
-#ifndef SHELL_HXX
-#define SHELL_HXX
+#ifndef CORE_HXX_H_
+#define CORE_HXX_H_
 
 #include "parser.hxx"
 
-namespace shell {
+namespace core {
     Result<void> ExecuteCommandGroup(const parser::CommandGroup& cmd_group);
     Result<std::string> GetCurrentDir();
 }
 
-#endif // SHELL_HXX
+#endif // CORE_HXX_H_

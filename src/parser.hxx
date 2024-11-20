@@ -1,5 +1,5 @@
-#ifndef PARSER_HXX
-#define PARSER_HXX
+#ifndef PARSER_HXX_H_
+#define PARSER_HXX_H_
 
 #include <string>
 #include <vector>
@@ -32,5 +32,5 @@ namespace parser {
     };
 };
 
-#endif // PARSER_HXX
+#endif // PARSER_HXX_H_
 

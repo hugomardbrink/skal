@@ -1,5 +1,5 @@
-#ifndef RESULT_HXX
-#define RESULT_HXX
+#ifndef RESULT_HXX_H_
+#define RESULT_HXX_H_
 
 #include <variant>
 #include <string>
@@ -59,5 +59,5 @@ namespace result {
     }; 
 
 } // namespace
-#endif // RESULT_HXX
+#endif // RESULT_HXX_H_
 
