@@ -4,6 +4,7 @@
 
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <csignal> 
 
 #include "parser.hxx"
 #include "result.hxx"

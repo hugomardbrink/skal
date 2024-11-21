@@ -11,3 +11,5 @@ add_executable(skal ${SOURCES})
 
 target_link_libraries(skal PRIVATE readline)
 
+file(GLOB_RECURSE TEST_SOURCES test/*.cxx test/*.hxx src/core.*xx src/parser.*xx)
+add_executable(test ${TEST_SOURCES})
