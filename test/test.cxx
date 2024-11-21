@@ -1,13 +1,14 @@
 #include "test.hxx"
 #include "parser_test.hxx"
-#include "core_test.hxx"
+#include "shell_test.hxx"
 
 #include <iostream>
 
 int main() {
     std::cout << "Running tests..." << std::endl;
     parser_test::TestParser();
-    core_test::TestCore();
+    shell_test::TestShell();
+    std::cout << "All tests passed!" << std::endl;
     return 0;
 }
 

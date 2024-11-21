@@ -1,13 +1,13 @@
-#include "../src/core.hxx"
+#include "../src/shell.hxx"
 #include "../src/parser.hxx"
 
 #include "test.hxx"
-#include "core_test.hxx"
+#include "shell_test.hxx"
 
 #include <unistd.h>
 #include <sys/wait.h>
 
-void TestCoreExecute() {
+void TestShellExecute() {
     constexpr std::string_view prompt = "echo Hello, World!";
     parser::Parser p;
 
@@ -30,7 +30,7 @@ void TestCoreExecute() {
 
         close(pipefd[1]);
 
-        Result<void> result = core::ExecuteCommandGroup(cmd_group);
+        Result<void> result = shell::ExecuteCommandGroup(cmd_group);
     } else {
         close(pipefd[1]);
 
@@ -52,11 +52,11 @@ void TestCoreExecute() {
 
         int status;
         waitpid(pid, &status, 0);
-        test::LogInfo("TestCoreExecute passed");
+        test::LogInfo("TestShellExecute passed");
     }
 }
 
-void TestCoreCdEmpty() {
+void TestShellCdEmpty() {
     constexpr std::string_view prompt = "cd";
     parser::Parser p;
 
@@ -66,7 +66,7 @@ void TestCoreCdEmpty() {
     }
     auto cmd_group = cmd_group_result.unwrap();
 
-    Result<void> result = core::ExecuteCommandGroup(cmd_group);
+    Result<void> result = shell::ExecuteCommandGroup(cmd_group);
     if(result.is_error()) {
         test::LogFatalError(result.unwrap_error());
     }
@@ -80,10 +80,10 @@ void TestCoreCdEmpty() {
         test::LogFatalError(Error{"cd failed"});
     }
 
-    test::LogInfo("TestCoreCdEmpty passed");
+    test::LogInfo("TestShellCdEmpty passed");
 }
 
-void TestCoreCd() {
+void TestShellCd() {
     parser::Parser p;
     //cd to binary directory
     system("cd ~/");
@@ -98,7 +98,7 @@ void TestCoreCd() {
     }
     auto cmd_group = cmd_group_result.unwrap();
     
-    auto result = core::ExecuteCommandGroup(cmd_group);
+    auto result = shell::ExecuteCommandGroup(cmd_group);
     if(result.is_error()) {
         test::LogFatalError(result.unwrap_error());
     }
@@ -115,10 +115,10 @@ void TestCoreCd() {
     auto dir_location = std::string(getenv("HOME")) + "/testDir";
     rmdir(dir_location.c_str());
 
-    test::LogInfo("TestCoreCd passed");
+    test::LogInfo("TestShellCd passed");
 }
 
-void TestExit() {
+void TestShellExit() {
     auto pid = fork();
     
     if(pid == 0) {
@@ -131,7 +131,7 @@ void TestExit() {
         }
         auto cmd_group = cmd_group_result.unwrap();
 
-        core::ExecuteCommandGroup(cmd_group);
+        shell::ExecuteCommandGroup(cmd_group);
 
         // If code reaches here, exit failed
         test::LogFatalError(Error{"exit failed"});
@@ -140,7 +140,7 @@ void TestExit() {
         int status;
         waitpid(pid, &status, 0);
         if(WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-            test::LogInfo("TestExit passed");
+            test::LogInfo("TestShellExit passed");
         } else {
             test::LogFatalError(Error{"exit failed"});
         }
@@ -151,11 +151,11 @@ void TestExit() {
 }
 
 
-void core_test::TestCore() {
-    test::LogInfo("Running core tests...");
-    TestCoreExecute();
-    TestCoreCdEmpty();
-    TestCoreCd();
-    TestExit();
+void shell_test::TestShell() {
+    test::LogInfo("Running shell tests...");
+    TestShellExecute();
+    TestShellCdEmpty();
+    TestShellCd();
+    TestShellExit();
 }
 
