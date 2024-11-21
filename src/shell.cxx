@@ -225,7 +225,10 @@ void HandleCtrlC(int sig) {
     }
     else {
         std::cout << std::endl;
+        rl_on_new_line();
+        rl_forced_update_display();
     }
+
 }
 
 void HandleBackgroundProcess(int sig)
@@ -283,6 +286,8 @@ Result<void> shell::RunShell() {
             } else {
                 return {};
             }
+        } else if (strlen(input) == 0) {
+            continue;
         }
 
         add_history(input);
