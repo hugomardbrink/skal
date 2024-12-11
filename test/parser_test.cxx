@@ -1,20 +1,20 @@
-#import "test.hxx"
-#import "parser_test.hxx"
+#include "test.hxx"
+#include "parser_test.hxx"
 
-#import "../src/parser.hxx"
-#import "../src/result.hxx"
+#include "../src/parser.hxx"
+#include "../src/result.hxx"
 
 parser::Parser p;
 
 void TestParserBasicCommand() {
     constexpr std::string_view prompt = "ls";
-    Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
     
-    parser::CommandGroup cmd_group = cmd_group_result.unwrap();
-    if(cmd_group.commands[0].cmd != prompt.data()) {
+    parser::CommandGroups cmd_groups = cmd_groups_result.unwrap();
+    if(cmd_groups[0].commands[0].cmd != prompt.data()) {
         test::LogFatalError(Error{"Failed to parse command args"});
     }
 
@@ -23,15 +23,15 @@ void TestParserBasicCommand() {
 
 void TestParserArgs() {
     constexpr std::string_view prompt = "ls -a -l";
-    Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
 
-    auto cmd_group = cmd_group_result.unwrap();
-    if(cmd_group.commands[0].args[0] != "-a") {
+    auto cmd_groups = cmd_groups_result.unwrap();
+    if(cmd_groups[0].commands[0].args[0] != "-a") {
         test::LogFatalError(Error{"Failed to parse args"});
-    } else if(cmd_group.commands[0].args[1] != "-l") {
+    } else if(cmd_groups[0].commands[0].args[1] != "-l") {
         test::LogFatalError(Error{"Failed to parse args"});
     }
 
@@ -40,25 +40,25 @@ void TestParserArgs() {
 
 void TestParserPipes() {
     constexpr std::string_view prompt = "ls -a | grep 'test' | wc -l";
-    Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
 
-    auto cmd_group = cmd_group_result.unwrap();
-    if(cmd_group.commands[0].cmd != "ls") {
+    auto cmd_groups = cmd_groups_result.unwrap();
+    if(cmd_groups[0].commands[0].cmd != "ls") {
         test::LogFatalError(Error{"Failed to parse piped command"});
-    } else if(cmd_group.commands[1].cmd != "grep") {
+    } else if(cmd_groups[0].commands[1].cmd != "grep") {
         test::LogFatalError(Error{"Failed to parse piped command"});
-    } else if(cmd_group.commands[2].cmd != "wc") {
+    } else if(cmd_groups[0].commands[2].cmd != "wc") {
         test::LogFatalError(Error{"Failed to parse piped command"});
     }
 
-    if(cmd_group.commands[0].args[0] != "-a") {
+    if(cmd_groups[0].commands[0].args[0] != "-a") {
         test::LogFatalError(Error{"Failed to parse piped args"});
-    } else if(cmd_group.commands[1].args[0] != "'test'") {
+    } else if(cmd_groups[0].commands[1].args[0] != "'test'") {
         test::LogFatalError(Error{"Failed to parse piped args"});
-    } else if(cmd_group.commands[2].args[0] != "-l") {
+    } else if(cmd_groups[0].commands[2].args[0] != "-l") {
         test::LogFatalError(Error{"Failed to parse piped args"});
     }
 
@@ -67,21 +67,21 @@ void TestParserPipes() {
 
 void TestParserStdin() {
     constexpr std::string_view prompt = "ls -a < test.txt";
-    Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
 
-    auto cmd_group = cmd_group_result.unwrap();
-    if(cmd_group.commands[0].cmd != "ls") {
+    auto cmd_groups = cmd_groups_result.unwrap();
+    if(cmd_groups[0].commands[0].cmd != "ls") {
         test::LogFatalError(Error{"Failed to parse stdin command"});
     }
 
-    if(cmd_group.commands[0].args[0] != "-a") {
+    if(cmd_groups[0].commands[0].args[0] != "-a") {
         test::LogFatalError(Error{"Failed to parse stdin args"});
     }
 
-    if(cmd_group.rstdin != "test.txt") {
+    if(cmd_groups[0].rstdin != "test.txt") {
         test::LogFatalError(Error{"Failed to parse stdin file"});
     }
 
@@ -90,21 +90,21 @@ void TestParserStdin() {
 
 void TestParserStdout() {
     constexpr std::string_view prompt = "ls -a > test.txt";
-    Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
 
-    auto cmd_group = cmd_group_result.unwrap();
-    if(cmd_group.commands[0].cmd != "ls") {
+    auto cmd_groups = cmd_groups_result.unwrap();
+    if(cmd_groups[0].commands[0].cmd != "ls") {
         test::LogFatalError(Error{"Failed to parse stdout command"});
     }
 
-    if(cmd_group.commands[0].args[0] != "-a") {
+    if(cmd_groups[0].commands[0].args[0] != "-a") {
         test::LogFatalError(Error{"Failed to parse stdout args"});
     }
 
-    if(cmd_group.rstdout != "test.txt") {
+    if(cmd_groups[0].rstdout != "test.txt") {
         test::LogFatalError(Error{"Failed to parse stdout file"});
     }
 
@@ -113,21 +113,21 @@ void TestParserStdout() {
 
 void TestParserStderr() {
     constexpr std::string_view prompt = "ls -a 2> test.txt";
-    Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
 
-    auto cmd_group = cmd_group_result.unwrap();
-    if(cmd_group.commands[0].cmd != "ls") {
+    auto cmd_groups = cmd_groups_result.unwrap();
+    if(cmd_groups[0].commands[0].cmd != "ls") {
         test::LogFatalError(Error{"Failed to parse stderr command"});
     }
 
-    if(cmd_group.commands[0].args[0] != "-a") {
+    if(cmd_groups[0].commands[0].args[0] != "-a") {
         test::LogFatalError(Error{"Failed to parse stderr args"});
     }
 
-    if(cmd_group.rstderr != "test.txt") {
+    if(cmd_groups[0].rstderr != "test.txt") {
         test::LogFatalError(Error{"Failed to parse stderr file"});
     }
 

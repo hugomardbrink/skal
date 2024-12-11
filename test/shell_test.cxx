@@ -11,11 +11,11 @@ void TestShellExecute() {
     constexpr std::string_view prompt = "echo Hello, World!";
     parser::Parser p;
 
-    Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
-    auto cmd_group = cmd_group_result.unwrap();
+    auto cmd_groups = cmd_groups_result.unwrap();
 
     int pipefd[2];
     if (pipe(pipefd) == -1) {
@@ -30,7 +30,7 @@ void TestShellExecute() {
 
         close(pipefd[1]);
 
-        Result<void> result = shell::ExecuteCommandGroup(cmd_group);
+        Result<void> result = shell::ExecuteCommandGroups(cmd_groups);
     } else {
         close(pipefd[1]);
 
@@ -60,13 +60,13 @@ void TestShellCdEmpty() {
     constexpr std::string_view prompt = "cd";
     parser::Parser p;
 
-    Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
-    auto cmd_group = cmd_group_result.unwrap();
+    auto cmd_groups = cmd_groups_result.unwrap();
 
-    Result<void> result = shell::ExecuteCommandGroup(cmd_group);
+    Result<void> result = shell::ExecuteCommandGroups(cmd_groups);
     if(result.is_error()) {
         test::LogFatalError(result.unwrap_error());
     }
@@ -92,13 +92,13 @@ void TestShellCd() {
     
 
     constexpr std::string_view prompt = "cd testDir";
-    auto cmd_group_result = p.parse(prompt.data());
-    if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+    auto cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
     }
-    auto cmd_group = cmd_group_result.unwrap();
+    auto cmd_groups = cmd_groups_result.unwrap();
     
-    auto result = shell::ExecuteCommandGroup(cmd_group);
+    auto result = shell::ExecuteCommandGroups(cmd_groups);
     if(result.is_error()) {
         test::LogFatalError(result.unwrap_error());
     }
@@ -125,13 +125,13 @@ void TestShellExit() {
         constexpr std::string_view prompt = "exit";
         parser::Parser p;
 
-        Result<parser::CommandGroup> cmd_group_result = p.parse(prompt.data());
-        if(cmd_group_result.is_error()) {
-        test::LogFatalError(cmd_group_result.unwrap_error());
+        Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+        if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
         }
-        auto cmd_group = cmd_group_result.unwrap();
+        auto cmd_groups = cmd_groups_result.unwrap();
 
-        shell::ExecuteCommandGroup(cmd_group);
+        shell::ExecuteCommandGroups(cmd_groups);
 
         // If code reaches here, exit failed
         test::LogFatalError(Error{"exit failed"});

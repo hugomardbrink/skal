@@ -56,7 +56,7 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd_it, const C
                 std::cerr << "dup2 failed" << std::endl;
                 _exit(1);
             }
-
+            
             dup2(stdout_fd, STDOUT_FILENO);
             close(stdout_fd);
         }
@@ -82,10 +82,11 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd_it, const C
  
         char **exec_args = GetExecArgs(cmd);
         execvp(exec_args[0], exec_args);
- 
+
         // If code reaches here, execvp failed
         std::cerr << "execvp failed" << std::endl;
-        _exit(1);
+        int error_code = errno;
+        exit(error_code);
     } else { // continue pipe
         int new_fd[2];
         if (pipe(new_fd) == -1) {
@@ -101,15 +102,17 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd_it, const C
             close(new_fd[FD_WRITE]); 
             dup2(new_fd[FD_READ], STDIN_FILENO); 
             close(new_fd[FD_READ]); 
-            
-            waitpid(pid, NULL, 0);
-            
+           
+            int status;
+            waitpid(pid, &status, 0);
+
             char **exec_args = GetExecArgs(cmd);
             execvp(exec_args[0], exec_args);
-
+            
             // If code reaches here, execvp failed
             std::cerr << "execvp failed" << std::endl;
-            _exit(1);
+            int error_code = errno;
+            exit(error_code);
         }
         else {
             std::cerr << "fork failed" << std::endl;
@@ -150,12 +153,18 @@ Result<void> shell::ExecuteCommandGroup(const CommandGroup& cmd_group) {
         } else if(pid > 0) {
             if(cmd_group.is_background) {
                 waitpid(pid, NULL, WNOHANG);
-            }
-            else {
+            } else {
                 foreground_pid = pid;
-                waitpid(pid, NULL, 0);
+
+                int status;
+                waitpid(pid, &status, 0);
+                if(WIFEXITED(status)) {
+                    if(WEXITSTATUS(status)) {
+                        return Error{"Command failed"};
+                    }
+                }
+
             }
-            waitpid(pid, NULL, 0);
         } else {
             return Error{"fork failed"};
         }
@@ -232,15 +241,18 @@ void HandleCtrlC(int sig) {
 }
 
 void HandleBackgroundProcess(int sig)
-{
-    auto pid = waitpid(-1, NULL, WNOHANG);
-    if(pid > 0 && foreground_pid != pid) 
-    {
-        std::cout << "[" << pid << "] Done" << std::endl;
+{  
+    if(foreground_pid.has_value()) {
+        return;
     }
 
-    if(foreground_pid == pid) 
-    {
+    auto pid = waitpid(-1, NULL, WNOHANG);
+    if(pid > 0 && foreground_pid != pid) {
+        std::cout << "[" << pid << "] Done" << std::endl;
+    } 
+        
+
+    if(foreground_pid == pid) {
         foreground_pid = std::nullopt;
     }
 }
@@ -257,6 +269,37 @@ Result<void> InitShell() {
         auto read_history_result{ReadHistoryFile()};
         if (read_history_result.is_error()) {
             return read_history_result.unwrap_error();
+        }
+    }
+    return {};
+}
+
+Result<void> shell::ExecuteCommandGroups(const CommandGroups& cmd_groups) {
+    for(auto cmd_group : cmd_groups) {
+        auto result = ExecuteCommandGroup(cmd_group);
+
+        if(result.is_error()) {
+            if(!cmd_group.logical_operator.has_value()) {
+                break;
+            }
+
+            auto logical_operator = cmd_group.logical_operator.value();
+            if(logical_operator == "||") {
+                continue;
+            } else if (logical_operator == "&&") {
+                return Error{"Command failed"};
+            }
+        } else {
+            if(!cmd_group.logical_operator.has_value()) {
+                break;
+            }
+
+            auto logical_operator = cmd_group.logical_operator.value();
+            if(logical_operator == "||") {
+                return Error{"Command failed"};
+            } else if (logical_operator == "&&") {
+                continue;
+            }
         }
     }
     return {};
@@ -292,12 +335,38 @@ Result<void> shell::RunShell() {
 
         add_history(input);
 
-        result::Result<parser::CommandGroup> cmd_group_result{p.parse(input)}; 
-        if (cmd_group_result.is_error()) {
-            std::cerr << cmd_group_result.unwrap_error().message << endl;
+        result::Result<parser::CommandGroups> cmd_groups_result{p.parse(input)}; 
+        if (cmd_groups_result.is_error()) {
+            std::cerr << cmd_groups_result.unwrap_error().message << endl;
         } else {
-            auto cmd_group{cmd_group_result.unwrap()};
-            ExecuteCommandGroup(cmd_group);
+            auto cmd_groups = cmd_groups_result.unwrap();
+            for(auto cmd_group : cmd_groups) {
+                auto result = ExecuteCommandGroup(cmd_group);
+
+                if(result.is_error()) {
+                    if(!cmd_group.logical_operator.has_value()) {
+                        break;
+                    }
+
+                    auto logical_operator = cmd_group.logical_operator.value();
+                    if(logical_operator == "||") {
+                        continue;
+                    } else if (logical_operator == "&&") {
+                        break;
+                    }
+                } else {
+                    if(!cmd_group.logical_operator.has_value()) {
+                        break;
+                    }
+
+                    auto logical_operator = cmd_group.logical_operator.value();
+                    if(logical_operator == "||") {
+                        break;
+                    } else if (logical_operator == "&&") {
+                        continue;
+                    }
+                }
+            }
         }
     }
     return {};

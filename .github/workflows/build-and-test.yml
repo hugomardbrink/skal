@@ -19,6 +19,7 @@ jobs:
     - name: Install clang++
       run: |
         sudo apt-get update
+        sudo apt-get install -y libreadline-dev
 
     # Step 3: Configure and build the project
     - name: Configure and Build

@@ -6,12 +6,13 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # add everything in src/ to the executable
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 file(GLOB_RECURSE SOURCES src/*.cxx src/*.hxx)
 add_executable(skal ${SOURCES})
 
 target_link_libraries(skal PRIVATE readline)
 
-file(GLOB_RECURSE TEST_SOURCES test/*.cxx test/*.hxx src/shell.*xx src/parser.*xx)
+file(GLOB_RECURSE TEST_SOURCES test/*.cxx test/*.hxx src/shell.*xx src/parser.*xx src/result.hxx)
 add_executable(test ${TEST_SOURCES})
 
 target_link_libraries(test PRIVATE readline)
