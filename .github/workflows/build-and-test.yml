@@ -15,11 +15,11 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Step 2: install clang++
-    - name: Install clang++
+    # Step 2: install dependencies
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libreadline-dev
+        sudo apt-get install -y libreadline-dev coreutils
 
     # Step 3: Configure and build the project
     - name: Configure and Build
@@ -32,4 +32,4 @@ jobs:
     # Step 4: Run the tests
     - name: Run tests
       run: |
-        ./build/test # Replace with the path to your test executable if needed
+        ./build/test 

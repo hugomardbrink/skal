@@ -79,13 +79,14 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd_it, const C
             dup2(stdin_fd, STDIN_FILENO);
             close(stdin_fd);
         }
- 
+
         char **exec_args = GetExecArgs(cmd);
         execvp(exec_args[0], exec_args);
 
         // If code reaches here, execvp failed
-        std::cerr << "execvp failed" << std::endl;
+        std::cerr << "skal: command not found: " << cmd.cmd << std::endl;
         int error_code = errno;
+        std::cerr << "Error code: " << error_code << endl;
         exit(error_code);
     } else { // continue pipe
         int new_fd[2];
@@ -110,7 +111,7 @@ void ExecuteCommand(std::vector<Command>::const_reverse_iterator cmd_it, const C
             execvp(exec_args[0], exec_args);
             
             // If code reaches here, execvp failed
-            std::cerr << "execvp failed" << std::endl;
+            std::cerr << "skal: command not found: " << cmd.cmd << std::endl;
             int error_code = errno;
             exit(error_code);
         }

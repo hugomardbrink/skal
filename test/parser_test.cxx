@@ -134,6 +134,36 @@ void TestParserStderr() {
     test::LogInfo("TestParserStderr passed");
 }
 
+void TestParserCommandChain() {
+    constexpr std::string_view prompt = "ls -a && echo 'test'";
+    Result<parser::CommandGroups> cmd_groups_result = p.parse(prompt.data());
+    if(cmd_groups_result.is_error()) {
+        test::LogFatalError(cmd_groups_result.unwrap_error());
+    }
+
+    auto cmd_groups = cmd_groups_result.unwrap();
+    if(cmd_groups[0].logical_operator != "&&") {
+        test::LogFatalError(Error{"Failed to parse and chain command"});
+    }
+
+    if(cmd_groups[0].commands[0].cmd != "ls") {
+        test::LogFatalError(Error{"Failed to parse and chain command"});
+    }
+    if(cmd_groups[1].commands[0].cmd != "echo") {
+        test::LogFatalError(Error{"Failed to parse and chain command"});
+    }
+
+    if(cmd_groups[0].commands[0].args[0] != "-a") {
+        test::LogFatalError(Error{"Failed to parse and chain args"});
+    }
+
+    if(cmd_groups[1].commands[0].args[0] != "'test'") {
+        test::LogFatalError(Error{"Failed to parse and chain args"});
+    }
+
+    test::LogInfo("TestParserCommandChain passed");
+}
+
 void parser_test::TestParser() {
     test::LogInfo("Running parser tests...");
     TestParserBasicCommand();
@@ -142,5 +172,6 @@ void parser_test::TestParser() {
     TestParserStdin();
     TestParserStdout();
     TestParserStderr();
+    TestParserCommandChain();
 }; 
 
