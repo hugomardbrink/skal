@@ -1,0 +1,2 @@
+run:
+	odin run .
