@@ -26,6 +26,7 @@ main :: proc() {
     }
 
     buf: [INPUT_MAX]byte
+    shell.init_shell()
 
     for true {
         prompt := shell.get_prompt()

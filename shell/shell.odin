@@ -1,5 +1,7 @@
 package shell
 
+import "base:runtime"
+
 import "core:fmt"
 import "core:strings"
 import "core:sys/posix"
@@ -12,6 +14,45 @@ import "../parser"
 ShellState :: enum {
     Continue,
     Stop
+}
+
+maybe_foreground_pid: Maybe(posix.pid_t) = nil
+ctx: runtime.Context
+
+handle_ctrl_c :: proc"c"(sig: posix.Signal) {
+    foreground_pid, foreground_running := maybe_foreground_pid.?
+
+    if foreground_running {
+        posix.kill(foreground_pid, .SIGINT) 
+    } else {
+        // Clear prompt
+    }
+}
+
+handle_backround_process :: proc"c"(sig: posix.Signal) {
+    context = ctx
+    foreground_pid, foreground_running := maybe_foreground_pid.?
+
+    if foreground_running do return
+
+    CHILD_PROCESS :: -1
+    background_pid := posix.waitpid(CHILD_PROCESS, nil, {.NOHANG})
+
+    if background_pid > 0 && background_pid != foreground_pid {
+        fmt.printf("skal: [%d] done", background_pid)
+        // Clear prompt
+    }
+
+    if foreground_pid == background_pid {
+        maybe_foreground_pid = nil
+    }
+
+}
+
+init_shell :: proc() {
+    ctx = context
+    posix.signal(.SIGINT, handle_ctrl_c)
+    posix.signal(.SIGCHLD, handle_backround_process)
 }
 
 get_prompt :: proc() -> string {
@@ -32,8 +73,8 @@ get_prompt :: proc() -> string {
         user = string(pw.pw_name)
     }
 
-    promt_parts := []string {user, " :: ", dir, " » "}
-    prompt, err := strings.concatenate(promt_parts[:], context.temp_allocator)
+    prompt_parts := []string {user, " :: ", dir, " » "}
+    prompt, err := strings.concatenate(prompt_parts[:], context.temp_allocator)
     log.assertf(err == nil, "Memory allocation failed")
 
     return prompt
@@ -161,9 +202,11 @@ execute_cmd_seq :: proc(cmd_seq: ^parser.CommandSequence) {
             pipe_command(&pipe_seq, nil, len(pipe_seq.commands)-1)
         case: // Parent
             if pipe_seq.is_background {
-                fmt.printf("Background process: [%d]\n", pid)
+                fmt.printf("skal: [%d] spawned\n", pid)
                 posix.waitpid(pid, nil, { .NOHANG})
             } else {
+                maybe_foreground_pid = pid
+
                 status: i32 
                 posix.waitpid(pid, &status, { .UNTRACED, .CONTINUED })
 
