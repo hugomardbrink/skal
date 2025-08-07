@@ -27,7 +27,7 @@ ParseError :: enum {
 SequenceType :: enum {
     Head,
     Or,
-    And
+    And,
 }
 
 Command :: struct {
@@ -214,7 +214,7 @@ parse :: proc(input: string) -> (cmd_seq: CommandSequence, err: ParseError) {
         cur_pipe_seq = cur_pipe_seq, 
         cur_cmd = cur_cmd, 
         tokens = c_tokens, 
-        token_idx = 1 
+        token_idx = 1,
     }
 
     for parser_state.token_idx < len(parser_state.tokens) {

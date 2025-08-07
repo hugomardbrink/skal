@@ -7,13 +7,12 @@ import "core:strings"
 import "core:sys/posix"
 import "core:os"
 import "core:log"
-import "core:mem"
 
 import "../parser"
 
 ShellState :: enum {
     Continue,
-    Stop
+    Stop,
 }
 
 maybe_foreground_pid: Maybe(posix.pid_t) = nil

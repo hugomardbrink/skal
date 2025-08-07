@@ -7,8 +7,7 @@ import "core:mem"
 
 import "parser"
 import "shell"
-
-INPUT_MAX :: 4096
+import "cli"
 
 main :: proc() {
     track: mem.Tracking_Allocator
@@ -25,18 +24,11 @@ main :: proc() {
         mem.tracking_allocator_destroy(&track)
     }
 
-    buf: [INPUT_MAX]byte
     shell.init_shell()
+    cli.init_cli()
 
     for true {
-        prompt := shell.get_prompt()
-
-        fmt.print(prompt)
-
-        buf_len, err := os.read(os.stdin, buf[:])
-        log.assertf(err == nil, "Error reading input")
-
-        input := string(buf[:buf_len]) 
+        input := cli.run_prompt()
         
         cmd_seq, parser_err := parser.parse(input)
         log.assertf(parser_err == nil, "Could not parse input")
