@@ -6,6 +6,7 @@ import "core:log"
 import "core:fmt"
 import "core:mem"
 import "core:slice"
+import "core:bytes"
 import "core:strings"
 import "core:sys/posix"
 import "core:path/filepath"
@@ -21,11 +22,12 @@ Term :: struct {
     min_pos: i32,
     history: [dynamic][]rune,
     history_pos: Maybe(i32),
+    history_file: string,
     written_line: Maybe([]rune),
     orig_mode: posix.termios
 }
 
-term := Term{pos = 0, min_pos = 0, history_pos = nil}
+term := Term{pos = 0, min_pos = 0, history_pos = nil, written_line = nil}
 
 init_cli :: proc () {
     mem_err: mem.Allocator_Error
@@ -38,13 +40,18 @@ init_cli :: proc () {
     home_path := string(posix.getenv("HOME"))
     log.assertf(home_path != "", "Home path not found")
 
-    history_file := filepath.join({home_path, HISTORY_FILE}, context.allocator) 
+    term.history_file = filepath.join({home_path, HISTORY_FILE}, context.allocator) //todo deinit
     log.assertf(mem_err == nil, "Memory allocation failed")
-    defer delete(history_file)
 
-    history_content, err := os.read_entire_file_from_filename_or_err(history_file, context.allocator)
+    if !os.exists(term.history_file) {
+        handle, ferr := os.open(term.history_file, os.O_CREATE | os.O_RDWR, 0o600) 
+        log.assertf(ferr == nil, "Failed to create history file")
+        os.close(handle)
+    }
+
+    history_content, err := os.read_entire_file_from_filename_or_err(term.history_file, context.allocator)
     if err != nil {
-        fmt.printfln("skal: Couldn't read history file, continuing without history...")
+        fmt.printfln("skal: Couldn't read history file: %s, because of: %s, continuing without history...", term.history_file, err)
         return
     }
     defer delete(history_content)
@@ -103,11 +110,6 @@ get_prompt_prefix :: proc() -> string {
 }
 
 @(private)
-get_input :: proc() -> string {
-    return utf8.runes_to_string(term.input_buffer[:])
-}
-
-@(private)
 reset_prompt :: proc() {
     clear(&term.input_buffer)
 }
@@ -160,10 +162,11 @@ handle_nav :: proc(in_stream: ^io.Stream) {
         }
 
         history_pos += 1 
+        history_pos_max := i32(len(term.history)-1)
         new_input: []rune 
-        if history_pos > i32(len(term.history)-1) {
+        if history_pos > history_pos_max {
             term.history_pos = nil 
-            history_pos = i32(len(term.history)-1)
+            history_pos = history_pos_max 
             new_input, ok = term.written_line.?; assert(ok)
             term.written_line = nil
         } else {
@@ -189,13 +192,14 @@ handle_nav :: proc(in_stream: ^io.Stream) {
     }
 }
 
+@(private)
 backwards :: proc() {
     DELETE_AND_REVERSE :: "\b \b"
 
     if term.pos == term.min_pos do return
     
     last_rune := term.input_buffer[len(term.input_buffer)-1]
-    _, _, width := utf8.grapheme_count(utf8.runes_to_string({last_rune}))
+    _, _, width := utf8.grapheme_count(utf8.runes_to_string({last_rune}, context.temp_allocator))
     resize(&term.input_buffer, len(term.input_buffer)-1)
 
     for _ in 0..<width {
@@ -205,6 +209,24 @@ backwards :: proc() {
     term.pos -=1
 }
 
+@(private)
+append_history_file :: proc(data: []rune) {
+    append(&term.history, slice.clone(data))
+    term.history_pos = nil
+    term.written_line = nil
+
+    fd, err := os.open(term.history_file, os.O_WRONLY | os.O_APPEND | os.O_CREATE)
+    defer os.close(fd)
+    if err != nil {
+        fmt.eprintfln("skal: Couldn't write to history file")
+        return
+    }
+    
+    history_data := strings.concatenate({utf8.runes_to_string(data[:]), "\n"}, context.temp_allocator)
+    _, werr := os.write_string(fd, history_data)
+    log.ensuref(werr == nil, "skal: Couldn't write to history file")
+}
+
 skip_and_clear :: proc() {
     reset_prompt()
     prompt_prefix := get_prompt_prefix()
@@ -212,11 +234,6 @@ skip_and_clear :: proc() {
 
     term.min_pos = i32(len(prompt_prefix))
     term.pos = term.min_pos
-}
-
-clear_and_print :: proc(input: []rune) {
-    skip_and_clear()
-    append(&term.input_buffer, ..input[:]) 
 }
 
 run_prompt :: proc() -> string {
@@ -232,8 +249,13 @@ run_prompt :: proc() -> string {
 
         switch rn {
         case '\n': 
-            fmt.println()        
-            return get_input()
+            fmt.println()
+            if len(term.input_buffer) == 0 do return "" 
+
+            append_history_file(term.input_buffer[:])
+            input := utf8.runes_to_string(term.input_buffer[:], context.temp_allocator)
+
+            return input
 
         case '\f':
             fmt.println()
