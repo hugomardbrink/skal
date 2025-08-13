@@ -26,16 +26,23 @@ main :: proc() {
 
     shell.init_shell()
     cli.init_cli()
+    defer cli.deinit_cli()
 
     for true {
-        input := cli.run_prompt()
+        defer free_all(context.temp_allocator)
+
+        maybe_input := cli.run_prompt()
+        input, ok := maybe_input.?
+        if !ok {
+            fmt.println()
+            break
+        }
         
         cmd_seq, parser_err := parser.parse(input)
         log.assertf(parser_err == nil, "Could not parse input")
 
         stop := shell.execute(&cmd_seq) 
 
-        free_all(context.temp_allocator)
         if stop == .Stop do break
     }
 }

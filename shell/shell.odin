@@ -9,6 +9,7 @@ import "core:os"
 import "core:log"
 
 import "../parser"
+import "../cli"
 
 ShellState :: enum {
     Continue,
@@ -16,20 +17,20 @@ ShellState :: enum {
 }
 
 maybe_foreground_pid: Maybe(posix.pid_t) = nil
-ctx: runtime.Context
 
 handle_ctrl_c :: proc"c"(sig: posix.Signal) {
+    context = runtime.default_context()
     foreground_pid, foreground_running := maybe_foreground_pid.?
 
     if foreground_running {
         posix.kill(foreground_pid, .SIGINT) 
-    } else {
-        // Clear prompt
-    }
+    } 
+
+    cli.skip_and_clear()
 }
 
 handle_backround_process :: proc"c"(sig: posix.Signal) {
-    context = ctx
+    context = runtime.default_context()
     foreground_pid, foreground_running := maybe_foreground_pid.?
 
     if foreground_running do return
@@ -49,34 +50,8 @@ handle_backround_process :: proc"c"(sig: posix.Signal) {
 }
 
 init_shell :: proc() {
-    ctx = context
     posix.signal(.SIGINT, handle_ctrl_c)
     posix.signal(.SIGCHLD, handle_backround_process)
-}
-
-get_prompt :: proc() -> string {
-    dir := os.get_current_directory(context.temp_allocator)
-    home := string(posix.getenv("HOME"))
-    
-    if strings.contains(dir, home) {
-        dir, _ = strings.replace(dir, home, "~", 1, context.temp_allocator)
-    } 
-    
-    uid := posix.getuid()
-    pw := posix.getpwuid(uid)
-
-    user: string
-    if pw == nil {
-        user = "Skal"
-    } else {
-        user = string(pw.pw_name)
-    }
-
-    prompt_parts := []string {user, " :: ", dir, " » "}
-    prompt, err := strings.concatenate(prompt_parts[:], context.temp_allocator)
-    log.assertf(err == nil, "Memory allocation failed")
-
-    return prompt
 }
 
 pipe_command :: proc(pipe_seq: ^parser.PipeSequence, maybe_fd: Maybe(posix.FD), idx: int) {
@@ -159,7 +134,7 @@ pipe_command :: proc(pipe_seq: ^parser.PipeSequence, maybe_fd: Maybe(posix.FD), 
 
     argv[0] = cmd.name
     for i := 0; i < len(cmd.args); i += 1 do argv[i+1] = cmd.args[i]
-
+    
     _ = posix.execvp(argv[0], raw_data(argv))
     fmt.printfln("skal: command not found: %s", argv[0])
     os.exit(1)
@@ -169,10 +144,10 @@ pipe_command :: proc(pipe_seq: ^parser.PipeSequence, maybe_fd: Maybe(posix.FD), 
 change_dir :: proc(cmd: ^parser.Command) {
     if len(cmd.args) > 0 {
         ch_status := posix.chdir(cmd.args[0]) 
-        if ch_status != .OK do fmt.printf("cd: No such file or directory: %s\n", cmd.args[0]) 
+        if ch_status != .OK do fmt.printfln("cd: No such file or directory: %s", cmd.args[0]) 
     } else { 
         ch_status := posix.chdir(posix.getenv("HOME"))
-        if ch_status != .OK do fmt.printf("cd: No such file or directory: %s\n", posix.getenv("HOME"))
+        if ch_status != .OK do fmt.printfln("cd: No such file or directory: %s", posix.getenv("HOME"))
     } 
 }
 
@@ -219,7 +194,9 @@ execute_cmd_seq :: proc(cmd_seq: ^parser.CommandSequence) {
 }
 
 execute :: proc(cmd_seq: ^parser.CommandSequence) -> ShellState {
-    if len(cmd_seq^.pipe_sequences) == 0 do return .Continue 
+    if len(cmd_seq^.pipe_sequences) == 0 {
+        return .Continue 
+    }
 
     // if pipe sequence is above 0 it has at least one command
     first_cmd := cmd_seq^.pipe_sequences[0].commands[0]

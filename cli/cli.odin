@@ -1,5 +1,7 @@
 package cli
 
+import "base:runtime"
+
 import "core:io"
 import "core:os"
 import "core:log"
@@ -16,55 +18,63 @@ INPUT_MAX :: 4096
 HISTORY_MAX :: 2048
 HISTORY_FILE :: "skal.history"
 
-Term :: struct {
-    input_buffer: [dynamic]rune,
-    pos: i32,
-    min_pos: i32,
-    history: [dynamic][]rune,
-    history_pos: Maybe(i32),
-    history_file: string,
-    written_line: Maybe([]rune),
-    orig_mode: posix.termios
+History :: struct {
+    data: [dynamic][]rune,
+    file: string,
+    maybe_idx: Maybe(i32),
+    maybe_cached_input: Maybe([]rune),
 }
 
-term := Term{pos = 0, min_pos = 0, history_pos = nil, written_line = nil}
+Input :: struct {
+    buffer: [dynamic]rune,
+    prompt_size: i32,
+    cursor_offset: i32,
+}
+
+Term :: struct {
+    orig_mode: posix.termios,
+    input: Input,
+    history: History,
+}
+
+term := Term{}
 
 init_cli :: proc () {
     mem_err: mem.Allocator_Error
-    term.input_buffer, mem_err = make([dynamic]rune, context.allocator) //todo deinit
+    term.input.buffer, mem_err = make([dynamic]rune, context.allocator) 
     log.assertf(mem_err == nil, "Memory allocation failed")
 
-    term.history, mem_err = make([dynamic][]rune, context.allocator) //todo deinit
+    term.history.data, mem_err = make([dynamic][]rune, context.allocator) 
     log.assertf(mem_err == nil, "Memory allocation failed")
 
     home_path := string(posix.getenv("HOME"))
     log.assertf(home_path != "", "Home path not found")
 
-    term.history_file = filepath.join({home_path, HISTORY_FILE}, context.allocator) //todo deinit
+    term.history.file = filepath.join({home_path, HISTORY_FILE}, context.allocator) 
     log.assertf(mem_err == nil, "Memory allocation failed")
 
-    if !os.exists(term.history_file) {
-        handle, ferr := os.open(term.history_file, os.O_CREATE | os.O_RDWR, 0o600) 
+    USER_PERMISSIONS :: 0o600
+    if !os.exists(term.history.file) {
+        handle, ferr := os.open(term.history.file, os.O_CREATE | os.O_RDWR, USER_PERMISSIONS) 
         log.assertf(ferr == nil, "Failed to create history file")
         os.close(handle)
     }
 
-    history_content, err := os.read_entire_file_from_filename_or_err(term.history_file, context.allocator)
-    if err != nil {
-        fmt.printfln("skal: Couldn't read history file: %s, because of: %s, continuing without history...", term.history_file, err)
-        return
-    }
+    history_content, err := os.read_entire_file_from_filename_or_err(term.history.file, context.allocator)
+    log.assertf(err == nil, "Failed to read history file")
     defer delete(history_content)
 
     history_content_it := string(history_content)
     for line in strings.split_lines_iterator(&history_content_it) {
-        append(&term.history, utf8.string_to_runes(line))
+        append(&term.history.data, utf8.string_to_runes(line))
     }
 
 }
 
 deinit_cli :: proc () {
-   delete(term.input_buffer) 
+   delete(term.input.buffer) 
+   delete(term.history.data)
+   delete(term.history.file)
 }
 
 disable_raw_mode :: proc "c" () {
@@ -110,16 +120,10 @@ get_prompt_prefix :: proc() -> string {
 }
 
 @(private)
-reset_prompt :: proc() {
-    clear(&term.input_buffer)
-}
-
-@(private)
 handle_esc_seq :: proc(in_stream: ^io.Stream) {
     NAV_SEQ_START :: '['
 
     next_rn, _, err := io.read_rune(in_stream^)
-
     log.assertf(err == nil, "Couldn't read from stdin")
     
     if next_rn == NAV_SEQ_START do handle_nav(in_stream) 
@@ -137,132 +141,155 @@ handle_nav :: proc(in_stream: ^io.Stream) {
 
     switch rn {
     case UP:
-        if term.history_pos == nil {
-            term.written_line = slice.clone(term.input_buffer[:], context.temp_allocator)
+        cur_history_idx, scrolling_history := term.history.maybe_idx.?
+        if !scrolling_history {
+            term.history.maybe_cached_input = slice.clone(term.input.buffer[:], context.temp_allocator)
+        } else if cur_history_idx == 0 {
+            return
         }
 
-        for len(term.input_buffer) > 0 {
-            backwards()
-        }
-        history_pos := term.history_pos.? or_else i32(len(term.history))
-        history_pos = max(history_pos-1, 0)
-        term.history_pos = history_pos
+        pop_runes(i32(len(term.input.buffer)))
 
-        new_input := term.history[history_pos]
-        append(&term.input_buffer, ..new_input[:])
-        fmt.printf("%s", term.input_buffer[:])
+        history_idx := term.history.maybe_idx.? or_else i32(len(term.history.data))
+        history_idx -= 1
+        term.history.maybe_idx = history_idx
 
-        term.pos = term.min_pos + i32(len(term.input_buffer))
+        new_input := term.history.data[history_idx]
+        write_runes(new_input[:])
+
     case DOWN: 
-        history_pos, ok := term.history_pos.?
-        if !ok do return
+        history_idx, scrolling_history := term.history.maybe_idx.?
+        if !scrolling_history do return
 
-        for len(term.input_buffer) > 0 {
-            backwards()
-        }
+        pop_runes(i32(len(term.input.buffer)))
 
-        history_pos += 1 
-        history_pos_max := i32(len(term.history)-1)
+        history_idx += 1 
+        history_len := i32(len(term.history.data))
         new_input: []rune 
-        if history_pos > history_pos_max {
-            term.history_pos = nil 
-            history_pos = history_pos_max 
-            new_input, ok = term.written_line.?; assert(ok)
-            term.written_line = nil
+
+        if history_idx >= history_len {
+            term.history.maybe_idx = nil 
+            history_idx = history_len
+
+            ok: bool
+            new_input, ok = term.history.maybe_cached_input.?; assert(ok)
+            term.history.maybe_cached_input = nil
         } else {
-            term.history_pos = history_pos
-            new_input = term.history[history_pos]
+            term.history.maybe_idx = history_idx
+            new_input = term.history.data[history_idx]
         }
+        write_runes(new_input[:])
 
-        append(&term.input_buffer, ..new_input[:])
-        fmt.printf("%s", term.input_buffer[:])
-
-        term.pos = term.min_pos + i32(len(term.input_buffer))
     case RIGHT: 
-        if i32(len(term.input_buffer)) + term.min_pos > term.pos {
+        if term.input.cursor_offset > 0 {
             fmt.print("\x1b[C")
-            term.pos += 1
+            term.input.cursor_offset -= 1
         }
 
     case LEFT:
-        if term.min_pos < term.pos {
+        if term.input.cursor_offset < i32(len(term.input.buffer)) {
             fmt.print("\x1b[D")
-            term.pos -= 1
+            term.input.cursor_offset += 1
         }
     }
 }
 
-@(private)
-backwards :: proc() {
-    DELETE_AND_REVERSE :: "\b \b"
 
-    if term.pos == term.min_pos do return
+@(private)
+write_runes :: proc(rns: []rune) {
+    append(&term.input.buffer, ..rns[:])
+    fmt.print(utf8.runes_to_string(rns[:]))
+}
+
+@(private)
+write_rune :: proc(rn: rune) {
+    append(&term.input.buffer, rn)
+    fmt.print(rn)
+}
+
+@(private)
+pop_runes :: proc(amount: i32) {
+    DELETE_AND_REVERSE :: "\b \b"
+    log.assertf(amount <= i32(len(term.input.buffer)), "Cannot remove more runes that written in buffer")
     
-    last_rune := term.input_buffer[len(term.input_buffer)-1]
-    _, _, width := utf8.grapheme_count(utf8.runes_to_string({last_rune}, context.temp_allocator))
-    resize(&term.input_buffer, len(term.input_buffer)-1)
+    start_idx := i32(len(term.input.buffer)) - amount
+    runes := term.input.buffer[start_idx:]
+    _, _, width := utf8.grapheme_count(utf8.runes_to_string(runes, context.temp_allocator))
+    resize(&term.input.buffer, i32(len(term.input.buffer)) - amount)
 
     for _ in 0..<width {
         fmt.print(DELETE_AND_REVERSE)
     }
+}
 
-    term.pos -=1
+@(private)
+pop_rune_at_cursor :: proc() {
+    DELETE_AND_REVERSE :: "\b \b"
+
+    if len(term.input.buffer) == 0 do return
+    
+    last_rune := term.input.buffer[len(term.input.buffer)-1]
+    _, _, width := utf8.grapheme_count(utf8.runes_to_string({last_rune}, context.temp_allocator))
+    resize(&term.input.buffer, len(term.input.buffer)-1)
+
+    for _ in 0..<width {
+        fmt.print(DELETE_AND_REVERSE)
+    }
 }
 
 @(private)
 append_history_file :: proc(data: []rune) {
-    append(&term.history, slice.clone(data))
-    term.history_pos = nil
-    term.written_line = nil
+    append(&term.history.data, slice.clone(data))
+    term.history.maybe_idx = nil
+    term.history.maybe_cached_input = nil
 
-    fd, err := os.open(term.history_file, os.O_WRONLY | os.O_APPEND | os.O_CREATE)
+    fd, err := os.open(term.history.file, os.O_WRONLY | os.O_APPEND | os.O_CREATE)
+    log.assertf(err == nil, "Failed to write to history file")
     defer os.close(fd)
-    if err != nil {
-        fmt.eprintfln("skal: Couldn't write to history file")
-        return
-    }
     
     history_data := strings.concatenate({utf8.runes_to_string(data[:]), "\n"}, context.temp_allocator)
     _, werr := os.write_string(fd, history_data)
-    log.ensuref(werr == nil, "skal: Couldn't write to history file")
+    log.assertf(werr == nil, "Failed to write to history file")
 }
 
-skip_and_clear :: proc() {
-    reset_prompt()
+clear_input :: proc() {
+    clear(&term.input.buffer)
     prompt_prefix := get_prompt_prefix()
     fmt.printf("%s", prompt_prefix)
 
-    term.min_pos = i32(len(prompt_prefix))
-    term.pos = term.min_pos
+    term.input.prompt_size = i32(len(prompt_prefix))
 }
 
-run_prompt :: proc() -> string {
+skip_and_clear :: proc() {
+    fmt.println()
+    clear_input()
+}
+
+run_prompt :: proc() -> Maybe(string) {
     enable_raw_mode() 
-    
-    skip_and_clear()
+    clear_input()
     
     in_stream := os.stream_from_handle(os.stdin)
     
     for {
-        rn, size, err := io.read_rune(in_stream)
+        rn, _, err := io.read_rune(in_stream)
         log.assertf(err == nil, "Couldn't read from stdin")
 
         switch rn {
         case '\n': 
             fmt.println()
-            if len(term.input_buffer) == 0 do return "" 
+            if len(term.input.buffer) == 0 do return "" 
 
-            append_history_file(term.input_buffer[:])
-            input := utf8.runes_to_string(term.input_buffer[:], context.temp_allocator)
+            append_history_file(term.input.buffer[:])
+            input := utf8.runes_to_string(term.input.buffer[:], context.temp_allocator)
 
             return input
 
         case '\f':
-            fmt.println()
             return "clear" // This is a terminal history wipe, usually isn't
 
         case '\u007f':
-            backwards()
+            pop_rune_at_cursor()
 
         case '\x1b':
             handle_esc_seq(&in_stream)
@@ -270,14 +297,10 @@ run_prompt :: proc() -> string {
         case utf8.RUNE_EOF:
             fallthrough
         case '\x04':
-            fmt.println()
-            skip_and_clear()
+            return nil
 
         case: // Bug: if user moved to earlier character
-            append(&term.input_buffer, rn)
-            term.pos += 1 
-
-            fmt.print(rn)
+            write_rune(rn)
         }
 
     }
