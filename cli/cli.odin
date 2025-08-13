@@ -14,9 +14,7 @@ import "core:sys/posix"
 import "core:path/filepath"
 import "core:unicode/utf8"
 
-INPUT_MAX :: 4096
-HISTORY_MAX :: 2048
-HISTORY_FILE :: "skal.history"
+import "../config"
 
 History :: struct {
     data: [dynamic][]rune,
@@ -50,7 +48,7 @@ init_cli :: proc () {
     home_path := string(posix.getenv("HOME"))
     log.assertf(home_path != "", "Home path not found")
 
-    term.history.file = filepath.join({home_path, HISTORY_FILE}, context.allocator) 
+    term.history.file = filepath.join({home_path, config.HISTORY_FILE}, context.allocator) 
     log.assertf(mem_err == nil, "Memory allocation failed")
 
     USER_PERMISSIONS :: 0o600
@@ -112,7 +110,17 @@ get_prompt_prefix :: proc() -> string {
         user = string(pw.pw_name)
     }
 
-    prompt_parts := []string {user, " :: ", dir, " » "}
+    prompt_parts := []string {
+        config.USER_COLOR, 
+        user, 
+        config.DETAILS_COLOR,
+        " :: ", 
+        config.DIR_COLOR,
+        dir, 
+        config.DETAILS_COLOR,
+        " » ",
+        config.BASE_COLOR}
+
     prompt, err := strings.concatenate(prompt_parts[:], context.temp_allocator)
     log.assertf(err == nil, "Memory allocation failed")
 

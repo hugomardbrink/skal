@@ -10,6 +10,7 @@ import "core:log"
 
 import "../parser"
 import "../cli"
+import "../config"
 
 ShellState :: enum {
     Continue,
@@ -40,7 +41,7 @@ handle_backround_process :: proc"c"(sig: posix.Signal) {
 
     if background_pid > 0 && background_pid != foreground_pid {
         fmt.printf("skal: [%d] done", background_pid)
-        // Clear prompt
+        // todo: skip and redraw prompt with input 
     }
 
     if foreground_pid == background_pid {
