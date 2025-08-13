@@ -91,24 +91,62 @@ enable_raw_mode :: proc() {
 	log.assertf(status == .OK, "Couldn't enable terminal in raw mode")
 }
 
+get_maybe_git_prompt :: proc(dir: string) -> Maybe(string) {
+    GIT_FOLDER :: ".git"
+    git_path := filepath.join({dir, GIT_FOLDER}, context.temp_allocator) 
+    uses_git := os.exists(git_path)
+
+    if !uses_git do return nil
+
+    HEAD_FILE_NAME :: "HEAD"
+    head_file_path := filepath.join({git_path, HEAD_FILE_NAME}, context.temp_allocator)
+    head_data, ferr := os.read_entire_file_or_err(head_file_path, context.temp_allocator)
+    if ferr != nil do return nil
+
+    // e.g. ref: refs/heads/main, last part indicates branch
+    ref_parts, merr := strings.split(string(head_data), "/", context.temp_allocator)
+    log.assertf(merr == nil, "Memory allocation failed")
+   
+    branch, prompt_part: string
+    ok: bool
+    is_raw_hash := len(ref_parts) == 1
+    if is_raw_hash {
+        HASH_MAX_LEN :: 9
+        branch, ok = strings.substring(ref_parts[0], 0, HASH_MAX_LEN)
+        if !ok do return nil
+    } else {
+        branch = strings.trim_right_space(ref_parts[len(ref_parts) - 1])
+    }
+
+    // todo: add if branch has changes or not
+    prompt_part, merr = strings.concatenate({"‹", branch, "›"}, context.temp_allocator)
+    log.assertf(merr == nil, "Memory allocation failed")
+    return prompt_part
+}
+
 @(private)
 get_prompt_prefix :: proc() -> string {
     dir := os.get_current_directory(context.temp_allocator)
     home := string(posix.getenv("HOME"))
-    
+   
+    prompt_dir: string
     if strings.contains(dir, home) {  // Bug: might replace if later directories mirror the home path
-        dir, _ = strings.replace(dir, home, "~", 1, context.temp_allocator)
-    } 
+        prompt_dir, _ = strings.replace(dir, home, "~", 1, context.temp_allocator)
+    } else {
+        prompt_dir = dir
+    }
     
     uid := posix.getuid()
     pw := posix.getpwuid(uid)
 
+    DEFAULT_USERNAME :: "skal"
     user: string
     if pw == nil {
-        user = "Skal"
+        user = DEFAULT_USERNAME 
     } else {
         user = string(pw.pw_name)
     }
+
 
     prompt_parts := []string {
         config.USER_COLOR, 
@@ -116,7 +154,10 @@ get_prompt_prefix :: proc() -> string {
         config.DETAILS_COLOR,
         " :: ", 
         config.DIR_COLOR,
-        dir, 
+        prompt_dir,
+        " ",
+        config.GIT_COLOR,
+        get_maybe_git_prompt(dir).? or_else "",
         config.DETAILS_COLOR,
         " » ",
         config.BASE_COLOR}
